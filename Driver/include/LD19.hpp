@@ -8,15 +8,16 @@
 #define POINT_PER_PACK 12
 #define HEADER 0x54
 
-typedef struct
+typedef struct __attribute__((__packed__))
 { 
     uint16_t distance;
     uint8_t intensity;
 } LidarPointStructDef;
 
-typedef union{
-    uint8_t arr_data[47];
-    struct
+
+typedef union
+{
+    struct __attribute__((__packed__))
     {
         uint8_t header;
         uint8_t ver_len;
@@ -27,18 +28,19 @@ typedef union{
         uint16_t timestamp;
         uint8_t crc8;
     };
+    uint8_t data[47];
 } LiDARFrameTypeDef;
 
 typedef struct 
 {
-    float x;
-    float y;
+    double x;
+    double y;
 } Point2D_t;
 
 typedef struct 
 {
-    float dist;
-    float theta;
+    double dist;
+    double theta;
 } Polar_t;
 
 class LD19
@@ -48,7 +50,7 @@ class LD19
     ~LD19();
     std::vector<Point2D_t> getPoints2D();
     std::vector<Polar_t> getPointsPolar();
-    LiDARFrameTypeDef getPointRaw();
+    void getPointRaw();
  private:
     std::string file;
     int fd;

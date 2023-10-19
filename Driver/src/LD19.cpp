@@ -5,6 +5,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
+#include <cmath>
+
+#define PI 3.14159265
 
 uint8_t prev_buff[47] = {0};
 uint8_t start = 0;
@@ -92,47 +95,77 @@ LD19::~LD19()
 std::vector<Point2D_t> LD19::getPoints2D()
 { 
     std::vector<Point2D_t> points_2d;
-    LiDARFrameTypeDef raw = this->getPointRaw();
-    printf("%d \n", this->raw.point[1].distance);
+    this->getPointRaw();
+    uint8_t size = (this->raw.ver_len & 0x0F);
+    float step = (this->raw.end_angle - this->raw.start_angle)/(100.0f*(size-1));
+    if(step < 0) step = 360.0f + step;
+    
+    for(uint8_t i = 0; i < this->raw.ver_len; i++)
+    {
+        double angle = this->raw.start_angle/100.0f + i*step;
+        if(angle > 360.0f) angle -= 360.0f;
+        double dist = this->raw.point[i].distance/10.0f;
+        if(this->raw.point[i].intensity > 230 && dist < 600 && dist > 0)
+        {
+            Point2D_t p_aux = {.x = dist*cos((angle)*PI/180.0f),
+                               .y = dist*sin((angle)*PI/180.0f)};
+            points_2d.push_back(p_aux);
+        }
+    }
     return points_2d;
 }
 
 std::vector<Polar_t> LD19::getPointsPolar()
 {
     std::vector<Polar_t> points_polar;
+    //FIXME: 2 functions using the same code to get the data
+    this->getPointRaw();
+    uint8_t size = (this->raw.ver_len & 0x0F);
+    float step = (this->raw.end_angle - this->raw.start_angle)/(100.0f*(size-1));
+    if(step < 0) step = 360.0f + step;
+    
+    for(uint8_t i = 0; i < this->raw.ver_len; i++)
+    {
+        double angle = this->raw.start_angle/100.0f + i*step;
+        if(angle > 360.0f) angle -= 360.0f;
+        double dist = this->raw.point[i].distance/10.0f;
+        if(this->raw.point[i].intensity > 230 && dist < 600 && dist > 0)
+        {
+            Polar_t p_aux = {.dist = dist,
+                             .theta = (angle)*PI/180.0f };
+            points_polar.push_back(p_aux);
+        }
+        
+    }
     return points_polar;
 }
 
-LiDARFrameTypeDef LD19::getPointRaw()
+void LD19::getPointRaw()
 {
+    //FIXME: Verify time to read and get struct
     uint8_t new_buff[47];
     uint32_t l_len_buff = 47;
     memset(new_buff,0,l_len_buff);
     size_t size_read = read(this->fd, new_buff,l_len_buff);
-    //std::cout << "Read size " << size_read << std::endl;
 
     if(size_read == (size_t)(-1))
-        return this->raw;
+        return;
 
     for(size_t i = start; i < 47; i++)
     {
-        this->raw.arr_data[i - start] = prev_buff[i];
+        this->raw.data[i - start] = prev_buff[i];
     }
 
     for(size_t i = 0; i < start; i++)
     {
-        this->raw.arr_data[i + 47 - start] = new_buff[i];
+        this->raw.data[i + 47 - start] = new_buff[i];
     }
 
     for(size_t i = 0; i < 46; i++)
     {
-        printf("%02x", this->raw.arr_data[i]);
-        //FIXME: Case when i == 46 never treated.
         if(new_buff[i] == HEADER && new_buff[i+1] == 0x2C)
             start = i;
     }
-    memmove(prev_buff, new_buff, 47);
-    printf("%02x", this->raw.arr_data[46]);
-    std::cout << std::endl;
-    return this->raw;
+
+    memmove(prev_buff, new_buff, sizeof(LiDARFrameTypeDef));
 }
